@@ -1,5 +1,5 @@
 streamlit==1.15.2
-PyPDF2==3.0.0
+PyPDF2==2.10.0
 pdfplumber==0.7.5
 pandas==1.5.3
-numpy==2.2.0
+numpy==1.21.6

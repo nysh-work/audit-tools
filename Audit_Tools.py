@@ -37,6 +37,19 @@ cur.execute('''
 ''')
 conn.commit()
 
+# Create projects table if it doesn't exist
+cur.execute('''
+    CREATE TABLE IF NOT EXISTS projects (
+        project_id SERIAL PRIMARY KEY,
+        client_id INTEGER NOT NULL,
+        nature_of_assignment TEXT NOT NULL,
+        project_start_date DATE NOT NULL,
+        project_end_date DATE NOT NULL,
+        FOREIGN KEY (client_id) REFERENCES clients (client_id)
+    )
+''')
+conn.commit()
+
 # Function to hash passwords
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -63,7 +76,22 @@ def add_client(client_name, sector, audit_partner, audit_manager, client_code):
 
 # Function to get all clients
 def get_clients():
-    cur.execute('SELECT client_code, client_name, sector, audit_partner, audit_manager FROM clients')
+    cur.execute('SELECT client_id, client_code, client_name, sector, audit_partner, audit_manager FROM clients')
+    return cur.fetchall()
+
+# Function to add a new project
+def add_project(client_id, nature_of_assignment, project_start_date, project_end_date):
+    cur.execute('INSERT INTO projects (client_id, nature_of_assignment, project_start_date, project_end_date) VALUES (%s, %s, %s, %s)', 
+                (client_id, nature_of_assignment, project_start_date, project_end_date))
+    conn.commit()
+
+# Function to get all projects
+def get_projects():
+    cur.execute('''
+        SELECT p.project_id, c.client_name, p.nature_of_assignment, p.project_start_date, p.project_end_date
+        FROM projects p
+        JOIN clients c ON p.client_id = c.client_id
+    ''')
     return cur.fetchall()
 
 # Initialize session state for login
@@ -113,9 +141,10 @@ if st.session_state.logged_in:
     
     st.title("Audit Tools")
 
-    tab1, tab2 = st.tabs([
+    tab1, tab2, tab3 = st.tabs([
         "PDF Tools", 
-        "Client Database"
+        "Client Database",
+        "Project Database"
     ])
 
     with tab1:
@@ -364,5 +393,52 @@ if st.session_state.logged_in:
         clients = get_clients()
         df_clients = pd.DataFrame(clients, columns=["Client Code", "Client Name", "Sector", "Audit Partner", "Audit Manager"])
         st.dataframe(df_clients)
-else:
-    st.sidebar.error("Invalid username or password.")
+
+    with tab3:
+        st.header("Project Database")
+
+        # Initialize session state for project form
+        if "project_client_id" not in st.session_state:
+            st.session_state.project_client_id = ""
+        if "nature_of_assignment" not in st.session_state:
+            st.session_state.nature_of_assignment = ""
+        if "project_start_date" not in st.session_state:
+            st.session_state.project_start_date = ""
+        if "project_end_date" not in st.session_state:
+            st.session_state.project_end_date = ""
+
+        # Fetch client names for the dropdown
+        clients = get_clients()
+        client_options = {client[2]: client[0] for client in clients}  # {client_name: client_id}
+
+        # Project registration form
+        client_name = st.selectbox("Client Name", options=list(client_options.keys()), key="project_client_id")
+        nature_of_assignment = st.selectbox("Nature of Assignment", options=[
+            "Statutory Audit", 
+            "Internal Audit", 
+            "Tax Audit", 
+            "Certificates", 
+            "Others"
+        ], key="nature_of_assignment")
+        project_start_date = st.date_input("Project Start Date", key="project_start_date")
+        project_end_date = st.date_input("Project End Date", key="project_end_date")
+        add_project_button = st.button("Add Project")
+
+        if add_project_button:
+            if client_name and nature_of_assignment and project_start_date and project_end_date:
+                client_id = client_options[client_name]
+                add_project(client_id, nature_of_assignment, project_start_date, project_end_date)
+                st.success("Project added successfully!")
+                # Clear the form fields
+                st.session_state.project_client_id = ""
+                st.session_state.nature_of_assignment = ""
+                st.session_state.project_start_date = ""
+                st.session_state.project_end_date = ""
+            else:
+                st.error("Please fill in all fields.")
+
+        # Display all projects
+        st.subheader("All Projects")
+        projects = get_projects()
+        df_projects = pd.DataFrame(projects, columns=["Project ID", "Client Name", "Nature of Assignment", "Project Start Date", "Project End Date"])
+        st.dataframe(df_projects)
